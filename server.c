@@ -1,74 +1,17 @@
-#include "../header.h"
-
-#define BUFFER_SIZE 1024
+#include "../function.c"
 
 /* Per lanciarli: prima /server 127.0.0.1 123456 root_path/, poi ./client localhost 123456 */ 
 int cont_cli = 0;
 char* root_dir;   // Variabile in cui viene salvata la root_dir in cui verranno scritti o letti i file richiesti dall'utente 
 
-// Stampa i messaggi di errore, con il relativo errore
-void error(char *msg){
-    perror(msg);
-    exit(1);
-}
-
-// Funzione che controlla se la directory presa in input esiste o no
-int directory_exist(char *path) {
-    struct stat statbuf;
-    // Controlla se il percorso esiste e ottiene le informazioni sul file
-    if (stat(path, &statbuf) != 0) {
-        // Il percorso non esiste o c'è stato un errore
-        return 0;
-    }
-    // Restituisce 1 indicando che il percorso specificato esiste
-    return 1;
-}
-
-// Funzione per contare i file con un nome specifico in una directory
-int count_files_with_name(const char *directory, const char *filename) {
-    DIR *dir;
-    struct dirent *entry;
-    int count = 0;
-    // Apri la directory
-    if ((dir = opendir(directory)) == NULL) {
-        perror("opendir");
-        return -1;
-    }
-    // Itera sui file nella directory
-    while ((entry = readdir(dir)) != NULL) {
-        // Confronta il nome del file
-        if (strcmp(entry->d_name, filename) == 0) {
-            count++;
-        }
-    }
-    // Chiudi la directory
-    closedir(dir);
-    return count;
-}
-
 struct msg mod_write(struct msg cli_msg){
+    // Variabile in cui viene salvato il percorso completo
     char path[BUFFER_SIZE];
-    sprintf(path, "%s/%s", cli_msg.path, cli_msg.file_name);
-    int count = 0;
-    FILE* file;
-    if(directory_exist(cli_msg.path) == 1 && directory_exist(path) == 1){
-        char path_cp[BUFFER_SIZE];
-        while(true){
-            count += count_files_with_name(cli_msg.path, cli_msg.file_name);
-            if(count_files_with_name(cli_msg.path, cli_msg.file_name) == 0){break;}
-            char* temp = strtok(cli_msg.file_name, ".");
-            char ccc[BUFFER_SIZE];
-            sprintf(ccc, "%s(%d)", temp, count);
-            temp = strtok(NULL, "");
-            sprintf(ccc, "%s.%s", ccc, temp);
-            cli_msg.file_name = strdup(ccc);
-            sprintf(path_cp, "%s/%s", cli_msg.path, cli_msg.file_name);
-        }
-        file = fopen(path_cp, "w");
-        if(file == NULL ) error("File not found");
-        fclose(file);
-    }
+    sprintf(path, "%s%s", cli_msg.path, cli_msg.file_name);
+    // Controlla se il path esiste e se esiste anche il file all'interno della directory specificatas
+    if(directory_exist(cli_msg.path) == 1 && directory_exist(path) == 1) cli_msg.file_name = strdup(create_file(cli_msg.file_name, cli_msg.path));
     else{
+        FILE* file;
         char* path_temp = strdup(cli_msg.path);
         char* temp = strtok(path_temp, "/");
         char* cp_path_temp = strdup(temp);
@@ -91,51 +34,63 @@ void *handle_client(void *socket_desc) {
     int cont_msg = 0;
     struct msg cli_msg;
     FILE* file;
+    FILE* fp;
+    char command_line[BUFFER_SIZE];
 
     while((read_size = recv(new_socket, buffer, BUFFER_SIZE, 0)) > 0) {
         buffer[read_size] = '\0';
-        if(cont_msg == 0) cli_msg.mode = strdup(buffer);
+        if(cont_msg == 0) {
+            if(strcmp(buffer, "read") == 0) cli_msg.mode = 1;
+            else if(strcmp(buffer, "write") == 0) cli_msg.mode = 0;
+            else cli_msg.mode = 2;
+        }
         if(cont_msg == 1){
             char* path = strdup(root_dir);
             char* temp = strtok(buffer, "/");
+            cli_msg.path = malloc(BUFFER_SIZE);
             while(temp != NULL){
                 sprintf(path, "%s/%s", path, temp);
                 if(directory_exist(path) == 0) {mkdir(path, 0755);}
                 temp = strtok(NULL, "/");
             }
-            cli_msg.path = strdup(path);
+            sprintf(cli_msg.path, "%s/", path);
+            sprintf(command_line, "ls -la %s", path);
+            fp = popen(command_line, "r");
+            if(cli_msg.mode == 2) {cont_msg = 3;}
         }
         if(cont_msg == 2){
             cli_msg.file_name = strdup(buffer);
             char path[1024];
-            sprintf(path, "%s/%s", cli_msg.path, cli_msg.file_name);
-            printf("%s\n", path);
-            if(strcmp(cli_msg.mode, "read") == 0) file = fopen(path, "r");
+            sprintf(path, "%s%s", cli_msg.path, cli_msg.file_name);
+            if(cli_msg.mode == 1) file = fopen(path, "r");
             else{
                 cli_msg = mod_write(cli_msg);
                 char path_after[BUFFER_SIZE];
-                sprintf(path_after, "%s/%s", cli_msg.path, cli_msg.file_name);
+                sprintf(path_after, "%s%s", cli_msg.path, cli_msg.file_name);
                 file = fopen(path_after, "w");
             }
-            if(file == NULL) error("File not found");
+            if(file == NULL) strcpy(buffer, "fopen");
         }
         if(cont_msg > 2){
-            memset(&buffer, 0, BUFFER_SIZE);
-            if(strcmp(cli_msg.mode, "write") == 0 && strcmp(buffer, "end file") != 0){
-                fprintf(file, "%s", buffer);
-            }
-            else if(strcmp(cli_msg.mode, "write") == 0) fclose(file);
-            else if(strcmp(cli_msg.mode, "read") == 0){
+            if(cli_msg.mode == 0 && strcmp(buffer, "end file") != 0) fprintf(file, "%s", buffer);
+            else if(cli_msg.mode == 0) fclose(file);
+            else if(cli_msg.mode == 1){
                 if(fgets(buffer, BUFFER_SIZE, file) == NULL) {
                     memset(&buffer, 0, BUFFER_SIZE);
                     strcpy(buffer, "end file");
                     fclose(file);
                 }
             }
+            else if(cli_msg.mode == 2){
+                if(fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
+                    memset(&buffer, 0, BUFFER_SIZE);
+                    strcpy(buffer, "end file");
+                    pclose(fp);
+                }
+            }
         }
-        printf("Client %d: %s\n", cont_cli, buffer);
         cont_msg++;
-        send(new_socket, buffer, strlen(buffer), 0);
+        if(send(new_socket, buffer, strlen(buffer), 0) < 0) printf("Errore invio messaggio al client\n");
     }
 
     if(read_size == 0) {
@@ -144,7 +99,7 @@ void *handle_client(void *socket_desc) {
     } else if(read_size == -1) {
         error("recv failed");
     }
-
+    free(cli_msg.file_name);
     close(new_socket);
     free(socket_desc);
     return NULL;

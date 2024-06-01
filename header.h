@@ -12,6 +12,8 @@
 #include <pthread.h>
 #include <dirent.h>
 
+#define BUFFER_SIZE 1024
+
 // Struct in cui salvo l'indirizzo del client, il path specificato, il nome del file, la modalita' (se lettura o scrittua)
 #ifndef CLIENT_INFORMATION
 #define CLIENT_INFORMTAION
@@ -29,6 +31,8 @@ struct client_inf{
     // Modalita': lettura o scrittura
     bool read;
     bool write;
+    // Commando ls -la
+    bool ls_la;
 };
 #endif
 
@@ -40,6 +44,14 @@ struct client_inf{
 struct msg{
     char* path;                          // Percorso specificato
     char* file_name;                     // Nome del file
-    char* mode;                          // Modalita' (scrittura o lettura)
+    int mode;                            // Modalita' (0-scrittura o 1-lettura)
 };
 #endif
+
+// Funzioni utilizzate sia in server.c e client.c
+
+// Funzione che dato un percorso determina se tale percorso esiste
+int directory_exist(char* path);
+// 
+// Funzione che dato un percorso e un nome di un file determina quanti file esistono nel percorso con quel nome
+int count_file(char* path, char* file_name);

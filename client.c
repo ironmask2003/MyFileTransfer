@@ -8,18 +8,10 @@
 #include <netinet/in.h>
 #include <netdb.h> 
 #include <unistd.h>
-#include "header.h"
-
-#define BUFFER_SIZE 1024
+#include "function.c"
 
 // Informazioni del client
 struct client_inf cl;
-
-// Stampa i messaggi di errore, con il relativo errore
-void error(char *msg){
-    perror(msg);
-    exit(0);
-}
 
 // Funzione che estrare da una directory il nome del file e il percorso
 char** take_file_path(char* complete_path, char* result[2]){
@@ -27,71 +19,22 @@ char** take_file_path(char* complete_path, char* result[2]){
     size_t length_path = file_name - complete_path;        // Lunghezza della stringa in cui salvare il percorso del file, senza il nome del file
     char path[length_path];                               // Crea l'array di caratteri (stringa) in cui salvare il percordo del file
     // Controlla se l'ultimo slash e' stato preso correttamente
-    if(file_name != NULL){
+    if(file_name != NULL && strcmp(file_name, "") != 0){
         strncpy(path, complete_path, length_path);        // Copia il percorso del file in results
         path[length_path] = '\0';                         // Aggiunge il terminatore, per indicare la fine della stringa
-    } else {error("Error, missing slash in the path (try to run again the command and after -o or -f specify a correct path)");}
+    } else {error("Error, missing slash in the path or file name not specified (try to run again the command and after -o or -f specify a correct path)");}
     result[0] = strdup(path);
     result[1] = strdup(file_name);
     return result;
-}
-
-// Funzione che controlla se la directory presa in input esiste o no
-int directory_exist(char *path) {
-    struct stat statbuf;
-    // Controlla se il percorso esiste e ottiene le informazioni sul file
-    if (stat(path, &statbuf) != 0) {
-        // Il percorso non esiste o c'è stato un errore
-        return 0;
-    }
-    // Restituisce 1 indicando che il percorso specificato esiste
-    return 1;
-}
-
-// Funzione per contare i file con un nome specifico in una directory
-int count_files_with_name(const char *directory, const char *filename) {
-    DIR *dir;
-    struct dirent *entry;
-    int count = 0;
-    // Apri la directory
-    if ((dir = opendir(directory)) == NULL) {
-        perror("opendir");
-        return -1;
-    }
-    // Itera sui file nella directory
-    while ((entry = readdir(dir)) != NULL) {
-        // Confronta il nome del file
-        if (strcmp(entry->d_name, filename) == 0) {
-            count++;
-        }
-    }
-    // Chiudi la directory
-    closedir(dir);
-    return count;
 }
 
 // Funzione che crea la directory e il file in cui viene salvato il file preso dal server
 void mod_read(){
     char path[BUFFER_SIZE];
     sprintf(path, "%s%s", cl.loacl_path, cl.loacl_file_name);
-    int count = 0;
     FILE* file;
     if(directory_exist(cl.loacl_path) == 1 && directory_exist(path) == 1){
-        char path_cp[BUFFER_SIZE];
-        while(true){
-            count += count_files_with_name(cl.loacl_path, cl.loacl_file_name);
-            if(count_files_with_name(cl.loacl_path, cl.loacl_file_name) == 0){break;}
-            char* temp = strtok(cl.loacl_file_name, ".");
-            char ccc[BUFFER_SIZE];
-            sprintf(ccc, "%s(%d)", temp, count);
-            temp = strtok(NULL, "");
-            sprintf(ccc, "%s.%s", ccc, temp);
-            cl.loacl_file_name = strdup(ccc);
-            sprintf(path_cp, "%s%s", cl.loacl_path, cl.loacl_file_name);
-        }
-        file = fopen(path_cp, "w");
-        if(file == NULL) error("File not found");
-        fclose(file);
+      cl.loacl_file_name = strdup(create_file(cl.loacl_file_name, cl.loacl_path));  
     }
     else{
         char* path_temp = strdup(cl.loacl_path);
@@ -111,8 +54,9 @@ void mod_read(){
 // Funzione che controlla gli argomenti specificati e se sono corretti quelli inseriti
 void check_command(int argc, char *argv[]){
     // Controllo della modalita' specificata dal client
-    if (strcmp(argv[1], "-w") == 0) { cl.write = 1; cl.read = 0; }
-    else if(strcmp(argv[1], "-r") == 0) { cl.read = 1; cl.write = 0; }
+    if (strcmp(argv[1], "-w") == 0) { cl.write = 1; cl.read = 0;}
+    else if(strcmp(argv[1], "-r") == 0) { cl.read = 1; cl.write = 0;}
+    else if(strcmp(argv[1], "-l") == 0) { cl.ls_la = 1; }
     else{error("Modalita' non specificata");}
     // Salva l'ip_address del server
     if(strcmp(argv[2], "-a") == 0){cl.ip_server = argv[3];}
@@ -120,6 +64,12 @@ void check_command(int argc, char *argv[]){
     // Salva la porta del server
     if(strcmp(argv[4], "-p") == 0) {cl.portno_server = atoi(argv[5]);}
     else {error("Porta del server non specificata");}
+    // Controlla se e' stato specificato il comando -l, allora ferma la funzione in quanto non esistono altri argomenti come il local_file_name
+    if(cl.ls_la == 1) {
+        if(argc > 7) cl.remote_path = strdup(argv[7]);
+        else cl.remote_path = "/";
+        return;
+    }
     // Salva il local path 
     if(strcmp(argv[6], "-f") == 0) {
         char* prova[2];
@@ -129,7 +79,7 @@ void check_command(int argc, char *argv[]){
     }
     else {error("Percorso file non specificato");}
     // Salva le informazioni del remote_path
-    if (argc >= 9) {if(strcmp(argv[8], "-o") == 0){
+    if (argc >= 9) {if(strcmp(argv[8], "-o") == 0 && cl.ls_la == 0){
         char* prova[2];
         char** path = take_file_path(argv[9], prova);
         cl.remote_path = path[0];
@@ -141,12 +91,11 @@ void check_command(int argc, char *argv[]){
         cl.remote_file_name = path[1];
     }
     if(cl.read == 1){mod_read();}
-    return;
 }
 
 int main(int argc, char *argv[]){
     // Controlla se sono stati inseriti i dati sufficenti per poter comunicare con il server
-    if(argc < 7){error("Insufficent arguments specified");}
+    if(argc < 5){error("Insufficent arguments specified");}
     // Controlla se i dati inseriti sono corretti
     check_command(argc, argv);
     int sockfd;
@@ -169,22 +118,25 @@ int main(int argc, char *argv[]){
         error("ERROR connecting");
     int i = 0;
     char path[BUFFER_SIZE];
-    sprintf(path, "%s%s", cl.loacl_path, cl.loacl_file_name);
+    if(cl.ls_la == 0) sprintf(path, "%s%s", cl.loacl_path, cl.loacl_file_name);
     FILE* file;
     while(1){
         memset(&buffer, 0, BUFFER_SIZE);
         memset(&server_reply, 0, BUFFER_SIZE);
         if(i == 0 && cl.read == true) {strcpy(buffer, "read"); file = fopen(path, "w");}
         else if(i == 0 && cl.write == true) {strcpy(buffer, "write"); file = fopen(path, "r");}
-        else if(i == 1) {strcpy(buffer, cl.remote_path);}
-        else if(i == 2) {strcpy(buffer, cl.remote_file_name);}
-        else if(i == 3) {strcpy(buffer, "end information");}
-        else{
-            if(cl.write == 1){
-                if(fgets(buffer, BUFFER_SIZE, file) == NULL) {strcpy(buffer, "end file");}
+        else if(i == 0 && cl.ls_la == true) {strcpy(buffer, "ls -la");}
+        else if(i == 1) {
+            strcpy(buffer, cl.remote_path);
+            if (cl.ls_la == true){
+                i = 3;
             }
-            else{strcpy(buffer, "continua");}
         }
+        else if(i == 2) {strcpy(buffer, cl.remote_file_name);}
+        else if(cl.ls_la == false && cl.write == true){
+            if(fgets(buffer, BUFFER_SIZE, file) == NULL) {strcpy(buffer, "end file");}
+        }
+        else{strcpy(buffer, "continua");}
         if (send(sockfd, buffer, strlen(buffer), 0) < 0) {
             perror("Send failed");
             close(sockfd);
@@ -195,19 +147,20 @@ int main(int argc, char *argv[]){
             perror("Recv failed");
             break;
         }
-        if(cl.read == 1 && i > 3){
+        if(cl.read == true && i > 2){
             if(strcmp(server_reply, "end file") != 0) {
                 fprintf(file, "%s", server_reply);
-                printf("%s\n", server_reply);
             }
         }
-        if(strcmp(server_reply, "end file") == 0){
-            fclose(file);
-            break;
+        else if(cl.ls_la == true && i > 2 && strcmp(server_reply, "end file") != 0){
+            printf("%s", server_reply);
         }
+        else if(cl.ls_la == true && i > 2 && strcmp(server_reply, "end file") == 0) break;
+        if(strcmp(server_reply, "end file") == 0){ fclose(file); break; }
+        if(strcmp(server_reply, "fopen") == 0) error("Errore con l'apertura del file del server (Mettere un nome fi un file valido)");
         i += 1;
     }
-    fclose(file);
+    if (cl.ls_la == false) fclose(file);
     close(sockfd);
     return 0;
 }

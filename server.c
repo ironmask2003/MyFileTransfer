@@ -1,18 +1,20 @@
 #include "../function.c"
 
-/* Per lanciarli: prima /server 127.0.0.1 123456 root_path/, poi ./client localhost 123456 */ 
-int cont_cli = 0;
-char* root_dir;   // Variabile in cui viene salvata la root_dir in cui verranno scritti o letti i file richiesti dall'utente 
+// Variabili globali
+int cont_cli = 0;   // Variabile che conta il numeri di client connessi
+char* root_dir;     // Variabile in cui viene salvata la root_dir in cui verranno scritti o letti i file richiesti dall'utente 
 
+// Funzione che se e' stata specificata la modalita' '-w' crea la directory e il file in cui salvare le informazioni
 struct msg mod_write(struct msg cli_msg){
     // Variabile in cui viene salvato il percorso completo
     char path[BUFFER_SIZE];
     sprintf(path, "%s%s", cli_msg.path, cli_msg.file_name);
     // Controlla se il path esiste e se esiste anche il file all'interno della directory specificatas
     if(directory_exist(cli_msg.path) == 1 && directory_exist(path) == 1) cli_msg.file_name = strdup(create_file(cli_msg.file_name, cli_msg.path));
+    // Se non esiste il percorso o il file crea il percorso dal punto in cui esiste e il file
     else{
         FILE* file;
-        char* path_temp = strdup(cli_msg.path);
+        char* path_temp = strdup(cli_msg.path);     // Copia del percorso specificato
         char* temp = strtok(path_temp, "/");
         char* cp_path_temp = strdup(temp);
         while(temp != NULL){
@@ -27,23 +29,30 @@ struct msg mod_write(struct msg cli_msg){
     return cli_msg;
 }
 
+// Handler assegnato ad ogni client che esegue la connessione al server
 void *handle_client(void *socket_desc) {
+    // socket del client
     int new_socket = *(int*)socket_desc;
+    // Variabile utilizzata per salvare i messaggi ricevuti dal client
     char buffer[BUFFER_SIZE];
     int read_size;
-    int cont_msg = 0;
-    struct msg cli_msg;
+    int cont_msg = 0;       // Variabile utilizzata per contare i messaggi ricevuti dal client
+    struct msg cli_msg;     // Struct utilizzata per salvare le informazioni per eseguire il trasferimento dei file
     FILE* file;
     FILE* fp;
+    // Variabile in cui viene salvato il comando 'ls -la' con la directory specificata dal client
     char command_line[BUFFER_SIZE];
-
+    // Ciclo che riceve i messaggi del client
     while((read_size = recv(new_socket, buffer, BUFFER_SIZE, 0)) > 0) {
         buffer[read_size] = '\0';
+        // Primo messaggio (modalita' specificata dall'utente (lettura, scrittua o ls -la))
         if(cont_msg == 0) {
             if(strcmp(buffer, "read") == 0) cli_msg.mode = 1;
             else if(strcmp(buffer, "write") == 0) cli_msg.mode = 0;
             else cli_msg.mode = 2;
         }
+        // Percorso da/in cui prendere/salvare i file nel server
+        // E controlla se e' stato specificato il comando ls -la, nel caso salva il percorso di cui si vogliono le informazioni attraverso il comando
         if(cont_msg == 1){
             char* path = strdup(root_dir);
             char* temp = strtok(buffer, "/");
@@ -58,9 +67,10 @@ void *handle_client(void *socket_desc) {
             fp = popen(command_line, "r");
             if(cli_msg.mode == 2) {cont_msg = 3;}
         }
+        // Nome del file da/in cui prendere/salvare il contenuto da inviare/ricevuto
         if(cont_msg == 2){
             cli_msg.file_name = strdup(buffer);
-            char path[1024];
+            char path[BUFFER_SIZE];
             sprintf(path, "%s%s", cli_msg.path, cli_msg.file_name);
             if(cli_msg.mode == 1) file = fopen(path, "r");
             else{
@@ -71,6 +81,7 @@ void *handle_client(void *socket_desc) {
             }
             if(file == NULL) strcpy(buffer, "fopen");
         }
+        // Una volta presi tutte le informazioni gestisce cosa fare in base alla modalita' specificata
         if(cont_msg > 2){
             if(cli_msg.mode == 0 && strcmp(buffer, "end file") != 0) fprintf(file, "%s", buffer);
             else if(cli_msg.mode == 0) fclose(file);
@@ -89,20 +100,25 @@ void *handle_client(void *socket_desc) {
                 }
             }
         }
+        // Incrementa il numero di messaggi inviati al client
         cont_msg++;
+        // Invio della risposta al client
         if(send(new_socket, buffer, strlen(buffer), 0) < 0) printf("Errore invio messaggio al client\n");
     }
-
+    // Controlla se il client si e' disconesso o c'è stato un problema nella ricezione del messaggio da parte del client
     if(read_size == 0) {
         printf("Client disconnected\n");
         fflush(stdout);
     } else if(read_size == -1) {
         error("recv failed");
     }
-    free(cli_msg.file_name);
+    // Decrementa il numero di client connessi al momento al server
+    cont_cli -= 1;
+    // Chiude la socket e libera la memoria dei malloc
+    free(cli_msg.path);
     close(new_socket);
     free(socket_desc);
-    return NULL;
+    return NULL;        // Fine funzione
 }
 
 int main(int argc, char *argv[]){
@@ -145,20 +161,22 @@ int main(int argc, char *argv[]){
         printf("Connection accepted\n");
         new_sock = malloc(1);
         *new_sock = newsockfd;
+        // Crea un thread per ogni client che si connette
         if (pthread_create(&thread_id, NULL, handle_client, (void*)new_sock) < 0) {
-            cont_cli += 1;
+            cont_cli += 1;      // Incrementa il numero di client
             perror("Could not create thread");
             free(new_sock);
             return 1;
         }
         printf("Handler assigned\n");
     }
+    // Controlla se il client e' riuscito a connettersi correttamente
     if (newsockfd < 0) {
         perror("Accept failed");
         close(sockfd);
         return 1;
     }
+    // Chiude la comunicazione 
     close(sockfd);
-    // Fine funzione
-    return 0; 
+    return 0;       // Fine funzione
 }

@@ -1,16 +1,16 @@
 // Dichiarazione delle librerie utilizzate
 #include <stdio.h>
-#include <sys/socket.h>
+#include <sys/socket.h>         // Usato per la comunicazione con il server
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <netinet/in.h>
-#include <strings.h>
+#include <netinet/in.h>         
+#include <strings.h>            // Usato per lavorare con le stringhe
 #include <stdlib.h>
 #include <arpa/inet.h>
-#include <stdbool.h>
+#include <stdbool.h>            // Usato per usare i booleani
 #include <unistd.h>
-#include <pthread.h>
-#include <dirent.h>
+#include <pthread.h>            // Usato per istanziare Thread
+#include <dirent.h>             // Usato per lavorare con le directory
 
 #define BUFFER_SIZE 1024
 
@@ -44,7 +44,7 @@ struct client_inf{
 struct msg{
     char* path;                          // Percorso specificato
     char* file_name;                     // Nome del file
-    int mode;                            // Modalita' (0-scrittura o 1-lettura)
+    int mode;                            // Modalita' (0-scrittura o 1-lettura e 2-comando ls -la)
 };
 #endif
 
@@ -55,3 +55,6 @@ int directory_exist(char* path);
 // 
 // Funzione che dato un percorso e un nome di un file determina quanti file esistono nel percorso con quel nome
 int count_file(char* path, char* file_name);
+//
+// Funzione che dato un percorso e un file crea il file nel percorso speficiato
+char* create_file(char* file_name, char* path);

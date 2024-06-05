@@ -110,7 +110,7 @@ int main(int argc, char *argv[]){
     // Associa al server address la porta presa in input
     serv_addr.sin_port = htons(cl.portno_server);
     // Imposta l'indirizzo IP
-    if(inet_pton(AF_INET, cl.ip_server, &serv_addr.sin_addr) <= 0){error("Errore nella conversione dell'indirizzo IP");}
+    if(inet_pton(AF_INET, cl.ip_server, &serv_addr.sin_addr) <= 0){error("Error converting IP address");}
     // Esegue la connessione, se la connessione non e' andata a buon fine stampa un errore
     if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
@@ -127,19 +127,22 @@ int main(int argc, char *argv[]){
         memset(&buffer, 0, BUFFER_SIZE);
         memset(&server_reply, 0, BUFFER_SIZE);
         // Controlla quale modalita' e' stata specificata, nel caso invia il nome della modalita' al server
-        if(i == 0 && cl.read == true) {strcpy(buffer, "read"); file = fopen(path, "w");}
-        else if(i == 0 && cl.write == true) {strcpy(buffer, "write"); file = fopen(path, "r");}
-        else if(i == 0 && cl.ls_la == true) {strcpy(buffer, "ls -la");}
+        if(i == 0 && cl.read == true) {strcpy(buffer, "read"); file = fopen(path, "w"); printf("File opened with mode -w\n");}
+        else if(i == 0 && cl.write == true) {strcpy(buffer, "write"); file = fopen(path, "r"); printf("File opened woth mode -r\n");}
+        else if(i == 0 && cl.ls_la == true) {strcpy(buffer, "ls -la"); printf("Command sent\n");}
         // Invia il percorso del server in/da cui prendere/salvare le informazioni
         else if(i == 1) {
             strcpy(buffer, cl.remote_path);
-            if (cl.ls_la == true) i = 3;        // Se e' stato specificato il comando ls -la allora al prossimo messaggio salta al ricevere direttamente le informazioni del comando ls -la
-        }
+            printf("Remote path sent\n");
+            if (cl.ls_la == true) { i = 3;        // Se e' stato specificato il comando ls -la allora al prossimo messaggio salta al ricevere direttamente le informazioni del comando ls -la
+            printf("------------------------------\n");
+            }  
+      }
         // Invia al server il nome del file in/da cui prendere/salvare informazioni
-        else if(i == 2) {strcpy(buffer, cl.remote_file_name);}
+        else if(i == 2) {strcpy(buffer, cl.remote_file_name); printf("Remote file_name sent\n");}
         // Controlla se e' stato specificato il comando '-w' nel caso manda il contenuto del file da inviare al server
         else if(cl.ls_la == false && cl.write == true){
-            if(fgets(buffer, BUFFER_SIZE, file) == NULL) {strcpy(buffer, "end file");}
+            if(fgets(buffer, BUFFER_SIZE, file) == NULL) {strcpy(buffer, "end file"); printf("File sent\n");}
         }
         // Altrimenti invia un messaggio di risposta al server con 'continua' che indica che il client sta ricevendo informaizoni dal server in quanto e' in modalita' -r
         else{strcpy(buffer, "continua");}
@@ -164,7 +167,7 @@ int main(int argc, char *argv[]){
         // Controlla se sono state stampate tutte le informazioni generate dal comando ls -la
         else if(cl.ls_la == true && i > 2 && strcmp(server_reply, "end file") == 0) break;
         // Controlla se e' finito il trasferimento del file
-        if(strcmp(server_reply, "end file") == 0) { fclose(file); break; }
+        if(strcmp(server_reply, "end file") == 0) { fclose(file); printf("File downloaded/uploaded\n"); break; }
         // Controlla se il server ha avuto problemi ad aprire il file
         if(strcmp(server_reply, "fopen") == 0) error("Errore con l'apertura del file del server (Mettere un nome fi un file valido)");
         // Incrementa il numero di messaggi

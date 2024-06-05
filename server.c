@@ -50,6 +50,7 @@ void *handle_client(void *socket_desc) {
             if(strcmp(buffer, "read") == 0) cli_msg.mode = 1;
             else if(strcmp(buffer, "write") == 0) cli_msg.mode = 0;
             else cli_msg.mode = 2;
+            printf("Client %d: Mod setted\n", cont_cli);
         }
         // Percorso da/in cui prendere/salvare i file nel server
         // E controlla se e' stato specificato il comando ls -la, nel caso salva il percorso di cui si vogliono le informazioni attraverso il comando
@@ -66,6 +67,7 @@ void *handle_client(void *socket_desc) {
             sprintf(command_line, "ls -la %s", path);
             fp = popen(command_line, "r");
             if(cli_msg.mode == 2) {cont_msg = 3;}
+            else printf("Client %d: Directory setted\n", cont_cli);
         }
         // Nome del file da/in cui prendere/salvare il contenuto da inviare/ricevuto
         if(cont_msg == 2){
@@ -80,15 +82,17 @@ void *handle_client(void *socket_desc) {
                 file = fopen(path_after, "w");
             }
             if(file == NULL) strcpy(buffer, "fopen");
+            printf("Client %d: File opened\n", cont_cli);
         }
         // Una volta presi tutte le informazioni gestisce cosa fare in base alla modalita' specificata
         if(cont_msg > 2){
             if(cli_msg.mode == 0 && strcmp(buffer, "end file") != 0) fprintf(file, "%s", buffer);
-            else if(cli_msg.mode == 0) fclose(file);
+            else if(cli_msg.mode == 0) {fclose(file); printf("Client %d: File saved\n", cont_cli); }
             else if(cli_msg.mode == 1){
                 if(fgets(buffer, BUFFER_SIZE, file) == NULL) {
                     memset(&buffer, 0, BUFFER_SIZE);
                     strcpy(buffer, "end file");
+                    printf("Client %d: File sendend\n", cont_cli);
                     fclose(file);
                 }
             }
@@ -96,6 +100,7 @@ void *handle_client(void *socket_desc) {
                 if(fgets(buffer, sizeof(buffer)-1, fp) == NULL) {
                     memset(&buffer, 0, BUFFER_SIZE);
                     strcpy(buffer, "end file");
+                    printf("Client %d: Command executed\n", cont_cli);
                     pclose(fp);
                 }
             }
@@ -161,9 +166,9 @@ int main(int argc, char *argv[]){
         printf("Connection accepted\n");
         new_sock = malloc(1);
         *new_sock = newsockfd;
+        cont_cli += 1;    // Incrementa il numero dei client connessi al mommento al server
         // Crea un thread per ogni client che si connette
         if (pthread_create(&thread_id, NULL, handle_client, (void*)new_sock) < 0) {
-            cont_cli += 1;      // Incrementa il numero di client
             perror("Could not create thread");
             free(new_sock);
             return 1;

@@ -126,9 +126,25 @@ void *handle_client(void *socket_desc) {
     return NULL;        // Fine funzione
 }
 
+char** take_argument(int argc, char *argv[], char* result[3]){
+  // Controlla se e' stato definito l'indirizzo IP per poter aprire la connessione
+  if(strcmp(argv[1], "-a") == 0) result[0] = argv[2];
+  else error("No IP address provided\n");
+  // Contorllo se e' stato definito la porta di rete
+  if(strcmp(argv[3], "-p") == 0) result[1] = argv[4];
+  else error("No port provided\n");
+  // Controlla se e' stata definita una root_dir da/in cui prendere/salvare file
+  if(strcmp(argv[5], "-d") == 0) result[2] = argv[6];
+  else error("No root_dir provided\n");
+  // Restituisce l'array con le informazioni necessarie per aprire la connessione lato server
+  return result;
+}
+
 int main(int argc, char *argv[]){
     int sockfd, newsockfd, portno, clilen, *new_sock;
     pthread_t thread_id;
+    // Array in cui vengono salvate le informazioni per aprire la connessione
+    char** result = malloc(3);
     // Variabile utilizzata per il settare alcune funzione del socket (esempio SO_REUSEADDR) se il valore e' impostato a 1 allora la funzione indicata viene attivata
     int opt = 1;
     char* ip_address; // Variabile in cui viene salvato l'indirizzo IP in cui si collega il server
@@ -138,9 +154,11 @@ int main(int argc, char *argv[]){
         fprintf(stderr,"ERROR, no port (or ip_address or root_dir) no provided\n");
         exit(1);
     }
-    ip_address = argv[1];    // Assegnazione dell'indirizzo IP specificato in input alla variabile ip_address
-    portno = atoi(argv[2]);  // Assegnazione della porta in cui collegarsi specificato in input alla variabile portno
-    root_dir = argv[3];  // Assegnazione della root_directory in cui salvare salvare o leggere i file su richiesta del client
+    result = take_argument(argc, argv, result);   // Prende le informaizoni necessarie con la funzione take_argument
+    ip_address = result[0];    // Assegnazione dell'indirizzo IP specificato in input alla variabile ip_address
+    portno = atoi(result[1]);  // Assegnazione della porta in cui collegarsi specificato in input alla variabile portno
+    root_dir = result[2];  // Assegnazione della root_directory in cui salvare salvare o leggere i file su richiesta del client
+    free(result);
     if(directory_exist(root_dir) == 2) error("Specificare una directory");
     // Se la directory non esiste viene creata
     else if(directory_exist(root_dir) == 0) mkdir(root_dir, 0755);
